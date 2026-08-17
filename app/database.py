@@ -4,7 +4,7 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from app.config import get_settings
 
 # Import models to register SQLAlchemy metadata before schema creation.
-from app import models  # noqa: F401
+# from app import models  # noqa: F401
 
 settings = get_settings()
 engine = create_engine(settings.database_url, pool_pre_ping=True)
