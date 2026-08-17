@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Request
@@ -14,7 +15,16 @@ from app.models import Delivery, Event, Rule
 from app.schemas import RuleCreate, RuleRead
 
 settings = get_settings()
-app = FastAPI(title=settings.app_name)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize database tables on startup
+    Base.metadata.create_all(bind=engine)
+    yield
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 SIMULATOR_RUNS: dict[str, dict] = {}
 
 
@@ -41,9 +51,7 @@ def compute_truth_snapshot() -> dict[str, int]:
 
 
 def verify_signature(raw_body: bytes, signature_header: str | None) -> bool:
-    if not settings.pseudogram_api_key:
-        return False
-    if not signature_header:
+    if not settings.pseudogram_api_key or not signature_header:
         return False
 
     expected_prefix = "sha256="
@@ -63,11 +71,13 @@ def match_rules_for_comment(text: str) -> list[Rule]:
     normalized_comment = text.lower()
     db = SessionLocal()
     try:
-        return [
-            rule
-            for rule in db.query(Rule).all()
-            if rule.normalized_keyword and rule.normalized_keyword in normalized_comment
-        ]
+        # Optimized DB-level string matching instead of loading all rules into memory
+        return (
+            db.query(Rule)
+            .filter(func.length(Rule.normalized_keyword) > 0)
+            .filter(func.instr(normalized_comment, Rule.normalized_keyword) > 0)
+            .all()
+        )
     finally:
         db.close()
 
@@ -94,6 +104,11 @@ def handle_comment_deleted(comment_id: str) -> None:
         db.close()
 
 
+@app.get("/")
+def read_root():
+    return {"status": "ok", "service": settings.app_name}
+
+
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": settings.app_name.lower()}
@@ -116,6 +131,9 @@ def create_rule(payload: RuleCreate):
         db.commit()
         db.refresh(rule)
         return RuleRead(rule_id=rule.id, keyword=rule.keyword, dm_message=rule.dm_message)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="rule already exists")
     finally:
         db.close()
 
@@ -166,8 +184,11 @@ def get_simulation_truth(run_id: str):
 
 
 @app.post("/webhook")
-async def receive_webhook(request: Request):
-    raw_body = await request.body()
+def receive_webhook(request: Request):
+    # Using synchronous def so FastAPI executes DB operations in a thread pool without blocking event loops
+    import asyncio
+
+    raw_body = asyncio.run(request.body())
     signature_header = request.headers.get("X-PseudoGram-Signature")
 
     if not verify_signature(raw_body, signature_header):
@@ -227,8 +248,3 @@ async def receive_webhook(request: Request):
         raise
     finally:
         db.close()
-
-
-@app.on_event("startup")
-def startup() -> None:
-    Base.metadata.create_all(bind=engine)
