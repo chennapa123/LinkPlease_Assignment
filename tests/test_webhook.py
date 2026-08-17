@@ -4,7 +4,7 @@ import json
 
 from fastapi.testclient import TestClient
 
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.database import SessionLocal
 from app.main import app
 from app.models import Event
@@ -23,6 +23,11 @@ def build_valid_signature(payload: dict, api_key: str) -> str:
     raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
     digest = hmac.new(api_key.encode("utf-8"), raw, hashlib.sha256).hexdigest()
     return f"sha256={digest}"
+
+
+def test_render_postgres_url_is_normalized_for_sqlalchemy():
+    settings = Settings(database_url="postgresql://linkplease_user:pass@dpg-abc.postgres.render.com:5432/linkplease")
+    assert settings.database_url == "postgresql+psycopg://linkplease_user:pass@dpg-abc.postgres.render.com:5432/linkplease"
 
 
 def test_valid_webhook_is_accepted_and_persisted():
