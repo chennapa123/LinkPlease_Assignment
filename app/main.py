@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
-from app.models import Delivery, Event, Rule
+from app.models import BlockedDuplicate, Delivery, Event, Rule
 from app.schemas import RuleCreate, RuleRead
 
 settings = get_settings()
@@ -39,7 +39,7 @@ def compute_truth_snapshot() -> dict[str, int]:
             .scalar()
             or 0
         )
-        duplicates_blocked = 0
+        duplicates_blocked = db.query(func.count(BlockedDuplicate.id)).scalar() or 0
         return {
             "sent": sent,
             "failed": failed,
@@ -48,6 +48,7 @@ def compute_truth_snapshot() -> dict[str, int]:
         }
     finally:
         db.close()
+
 
 
 def verify_signature(raw_body: bytes, signature_header: str | None) -> bool:
@@ -150,7 +151,7 @@ def get_stats():
             .scalar()
             or 0
         )
-        total_duplicates = 0
+        total_duplicates = db.query(func.count(BlockedDuplicate.id)).scalar() or 0
 
         return {
             "sent": total_sent,
@@ -237,10 +238,21 @@ def receive_webhook(request: Request):
                         db.commit()
                     except IntegrityError:
                         db.rollback()
+                        try:
+                            blocked = BlockedDuplicate(
+                                rule_id=rule.id,
+                                user_id=user_id,
+                                comment_id=str(comment_id),
+                            )
+                            db.add(blocked)
+                            db.commit()
+                        except Exception:
+                            db.rollback()
         elif event_type == "comment.deleted":
             comment_id = (payload.get("data") or {}).get("comment_id")
             if comment_id:
                 handle_comment_deleted(str(comment_id))
+
 
         return {"status": "accepted", "event_id": event_id}
     except Exception:

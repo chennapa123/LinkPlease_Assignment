@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.database import SessionLocal
 from app.main import app
-from app.models import Delivery, Event, Rule
+from app.models import BlockedDuplicate, Delivery, Event, Rule
 
 
 def reset_db():
@@ -13,8 +13,10 @@ def reset_db():
     db.query(Delivery).delete()
     db.query(Event).delete()
     db.query(Rule).delete()
+    db.query(BlockedDuplicate).delete()
     db.commit()
     db.close()
+
 
 
 def compare_truth(expected: dict, actual: dict) -> dict:

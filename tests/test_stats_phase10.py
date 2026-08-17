@@ -1,13 +1,17 @@
 from app.database import SessionLocal
 from app.main import get_stats
-from app.models import Delivery
+from app.models import BlockedDuplicate, Delivery, Event, Rule
 
 
 def reset_db():
     db = SessionLocal()
     db.query(Delivery).delete()
+    db.query(Rule).delete()
+    db.query(Event).delete()
+    db.query(BlockedDuplicate).delete()
     db.commit()
     db.close()
+
 
 
 def test_stats_are_database_backed_and_restart_safe():

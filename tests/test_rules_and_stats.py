@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from app.database import SessionLocal
 from app.main import app
-from app.models import Delivery, Rule
+from app.models import BlockedDuplicate, Delivery, Event, Rule
 
 client = TestClient(app)
 
@@ -11,8 +11,11 @@ def reset_db():
     db = SessionLocal()
     db.query(Delivery).delete()
     db.query(Rule).delete()
+    db.query(Event).delete()
+    db.query(BlockedDuplicate).delete()
     db.commit()
     db.close()
+
 
 
 def test_create_rule():

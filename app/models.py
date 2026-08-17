@@ -48,3 +48,14 @@ class Delivery(Base):
     )
 
     rule = relationship("Rule", backref="deliveries")
+
+
+class BlockedDuplicate(Base):
+    __tablename__ = "blocked_duplicates"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    rule_id: Mapped[int] = mapped_column(ForeignKey("rules.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    comment_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    blocked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
